@@ -13,6 +13,10 @@ function StampMark({kind,season,day,large=false}:{kind:Stamp;season:Season;day?:
 }
 function load():{store:Store;error:boolean}{try{return {store:decodeStore(localStorage.getItem(STORAGE_KEY)),error:false};}catch{return {store:decodeStore(null),error:true};}}
 
+function GitHubLink(){
+  return <a className="github-link" href="https://github.com/Padane22-spec/muri-calendar" target="_blank" rel="noopener noreferrer" aria-label="在 GitHub 查看木日源码（新标签页打开）"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 19c-4 1-4-2-6-2m12 5v-4c0-1-.4-1.8-1-2 3-.4 6-1.5 6-6a5 5 0 0 0-1.3-3.5 4.6 4.6 0 0 0-.1-3.5S17.5 2.6 15 4a13 13 0 0 0-6 0C6.5 2.6 5.4 3 5.4 3a4.6 4.6 0 0 0-.1 3.5A5 5 0 0 0 4 10c0 4.5 3 5.6 6 6-.6.2-1 1-1 2v4"/></svg><span>GitHub</span><span aria-hidden="true">↗</span></a>;
+}
+
 export default function App(){
   const [loaded]=useState(load);
   const [session]=useState(()=>new GameSession(new Date(),loaded.store));
@@ -73,7 +77,7 @@ export default function App(){
   const collected=Object.entries(session.store.stamps).filter(([date,stamp])=>date.startsWith(monthPrefix)&&stamp!=='viewed').length;
   const longDate=new Intl.DateTimeFormat('zh-CN',{year:'numeric',month:'long',day:'numeric',weekday:'long'}).format(session.date);
   return <main className={'page season-'+theme.id} style={{'--season':theme.color,'--season-pale':theme.pale} as CSSProperties}>
-    <header className="header"><a className="brand" href="#top"><span className="brand-mark">木</span><span>木日</span><i/><small>THE ART OF EVERY DAY</small></a><div className="header-right"><span className="live-dot"/>每日一局 · 慢慢拼就好<button className="help-button" onClick={()=>setHelp(!help)} aria-label="操作说明" aria-expanded={help}>?</button><button className="sound-button" onClick={toggleSound} aria-label={session.store.muted?'开启音效':'关闭音效'} aria-pressed={!session.store.muted}>{session.store.muted?'音效 关':'♪ 音效 开'}</button></div></header>
+    <header className="header"><a className="brand" href="#top"><span className="brand-mark">木</span><span>木日</span><i/><small>THE ART OF EVERY DAY</small></a><div className="header-right"><span className="header-tagline"><span className="live-dot"/>每日一局 · 慢慢拼就好</span><button className="help-button" onClick={()=>setHelp(!help)} aria-label="操作说明" aria-expanded={help}>?</button><button className="sound-button" onClick={toggleSound} aria-label={session.store.muted?'开启音效':'关闭音效'} aria-pressed={!session.store.muted}>{session.store.muted?'音效 关':'♪ 音效 开'}</button><GitHubLink/></div></header>
     <section className="intro" id="top"><div className="intro-copy"><div className="eyebrow"><span>ONE DAY, ONE PUZZLE</span><i/><span>{theme.name}</span></div><h1>把今天，拼出来。</h1><p>{theme.note}</p></div><div className="date-card"><div className="date-stamp"><Plant season={theme}/></div><div className="date-copy"><small>{key===formatDateInput(new Date())?'今日木作':'时光里的这一天'}</small><strong>{longDate}</strong></div><label className="date-picker" title="选择挑战日期"><span>▦</span><input type="date" value={key} onChange={e=>changeDate(e.target.value)} aria-label="选择挑战日期"/></label></div></section>
     {help&&<aside className="help-panel"><strong>只留下两格，就是今天。</strong><p>用 8 块木块覆盖底盘，留下月份和日期。左键拖动，滚轮旋转，右键翻转；也可以按 R / Shift+R 旋转、F 翻转、Esc 取消。绿色预览可落下，红色预览需要调整。Ctrl / ⌘ + Z 撤销，Shift + Ctrl / ⌘ + Z 重做。</p><p>独立拼成获得实心印章，灵感相助获得线框印章；直接看答案只留参考记录。局面自动保存在当前浏览器。</p><button onClick={()=>setHelp(false)}>开始慢慢拼</button></aside>}
     <section className={'game-panel'+(solved?' complete':'')} aria-label="日历拼图游戏">
