@@ -60,18 +60,19 @@ for (let id = 0; id < PIECES.length; id++) {
     }
   }
 }
-export function solve(goal: Cell[], fixed: Placement[] = [], maxNodes = 2_000_000): Placement[] | null {
+export type SolveResult = { status: 'solved'; solution: Placement[] } | { status: 'unsolvable' | 'limit' };
+export function solveDetailed(goal: Cell[], fixed: Placement[] = [], maxNodes = 2_000_000): SolveResult {
   const occupied = new Uint8Array(BOARD.length);
-  for (const cell of goal) { const i=cellIndices.get(cellKey(cell)); if(i===undefined) return null; occupied[i]=1; }
+  for (const cell of goal) { const i=cellIndices.get(cellKey(cell)); if(i===undefined) return {status:'unsolvable'}; occupied[i]=1; }
   let used = 0;
   for (const p of fixed) {
-    if ((used & (1<<p.id)) || !canPlace(p,fixed,goal)) return null;
+    if ((used & (1<<p.id)) || !canPlace(p,fixed,goal)) return {status:'unsolvable'};
     used |= 1<<p.id;
     for (const cell of placedCells(p)) occupied[cellIndices.get(cellKey(cell))!]=1;
   }
-  const solution = [...fixed]; let nodes = 0;
+  const solution = [...fixed]; let nodes = 0; let limited = false;
   function search(mask: number): boolean {
-    if (++nodes > maxNodes) return false;
+    if (++nodes > maxNodes) { limited = true; return false; }
     if (mask === (1<<PIECE_COUNT)-1) return true;
     let best: Candidate[] | null = null;
     for (let i=0;i<BOARD.length;i++) {
@@ -86,8 +87,13 @@ export function solve(goal: Cell[], fixed: Placement[] = [], maxNodes = 2_000_00
       c.indices.forEach(i=>occupied[i]=1); solution.push(c.placement);
       if(search(mask | (1<<c.placement.id))) return true;
       solution.pop(); c.indices.forEach(i=>occupied[i]=0);
+      if (limited) return false;
     }
     return false;
   }
-  return search(used) ? solution : null;
+  return search(used) ? {status:'solved',solution} : {status:limited?'limit':'unsolvable'};
+}
+
+export function solve(goal: Cell[], fixed: Placement[] = [], maxNodes = 2_000_000): Placement[] | null {
+  const result=solveDetailed(goal,fixed,maxNodes); return result.status==='solved'?result.solution:null;
 }
