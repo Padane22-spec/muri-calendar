@@ -22,6 +22,17 @@ npm test              # 规则、会话、存档和印章测试
 npm run verify:dates  # 全部 366 个日期的可解性验证
 ~~~
 
+## 部署到 GitHub Pages
+
+1. 在 GitHub 创建公开的空仓库，将本地代码推送到 `master` 分支。
+2. 在仓库 **Settings → Pages → Build and deployment → Source** 中选择 **GitHub Actions**。
+3. 首次上传若早于 Pages 设置，在 **Actions → Deploy to GitHub Pages → Run workflow** 中手动运行一次。
+4. 工作流通过测试、366 个日期验证和生产构建后自动发布；网站链接显示在 **Settings → Pages** 及部署任务中。
+
+之后每次推送到 `master` 都会自动更新网站。若更改默认分支，请同步修改 `.github/workflows/deploy.yml` 的触发分支。Vite 使用相对资源路径，兼容 `https://用户名.github.io/仓库名/` 和自定义域名。
+
+部署无需服务器或环境密钥。每位玩家的存档独立保存在自己的浏览器中。
+
 ## 四季木作
 
 - 深色胡桃木边框、凹槽与浅木内盘，配黄铜铭牌。
