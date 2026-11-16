@@ -18,3 +18,59 @@
 .github-link:hover{color:var(--season);border-color:var(--season);background:var(--season-pale)}
 @media(max-width:900px){.header-tagline{display:none}}
 @media(max-width:600px){.github-link{padding:5px 7px;margin-left:2px;font-size:10px}.intro-copy .eyebrow{display:none}.intro-copy p{font-size:11px}}
+
+/* Touch controls stay outside the canvas so a second finger can turn a held piece. */
+.touch-tools,.touch-instructions{display:none}
+.scene-wrap canvas{touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+@media(max-width:720px),(any-pointer:coarse){
+  .touch-tools{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;border-top:1px solid var(--line);background:#fbfaf6}
+  .touch-selection{font-size:12px;color:var(--season)}
+  .touch-tools>div{display:flex;gap:8px}
+  .touch-tools button{min-width:64px;min-height:44px;padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:var(--season-pale);color:var(--season);font-size:13px;touch-action:manipulation;cursor:pointer}
+  .touch-tools button:disabled{opacity:.4;cursor:default}
+  .desktop-controls{display:none}
+  .touch-instructions{display:flex}
+  .help-button{width:36px;height:36px;font-size:14px}
+  .sound-button,.github-link,.date-picker{min-height:44px}
+  .date-picker{min-width:44px}
+  .history-buttons button{width:40px;height:44px;font-size:22px}
+  .reset-button{min-height:44px;font-size:11px}
+  .action-links button,.calendar-top button,.win-card button{min-height:44px}
+}
+@media(max-width:720px){
+  body{min-width:320px}
+  .page{width:calc(100% - 16px);padding-top:8px}
+  .header{height:auto;min-height:48px;gap:6px}
+  .brand{gap:6px;font-size:16px;white-space:nowrap}
+  .brand small,.brand i,.header-tagline{display:none}
+  .header-right{display:flex;gap:4px;font-size:0}
+  .github-link{font-size:10px;margin:0;padding:5px 7px}
+  .help-button{margin:0}
+  .intro{flex-direction:row;align-items:center;gap:8px;padding:10px 0}
+  .intro-copy h1{font-size:17px;white-space:nowrap}
+  .intro-copy p,.intro-copy .eyebrow,.date-stamp,.date-copy small{display:none}
+  .date-card{padding:4px 6px;gap:4px;align-self:auto}
+  .date-copy strong{font-size:10px;line-height:1.5}
+  .date-picker{margin-left:0}
+  .panel-head{height:auto;min-height:56px;padding:6px 8px;gap:5px;flex-wrap:wrap}
+  .board-heading{display:none}
+  .goal-chips{margin:0 auto 0 0;gap:3px}
+  .goal-chips>span{display:none}
+  .goal-chips b{padding:4px 5px}
+  .progress-area{display:none}
+  .history-buttons{margin-right:0;gap:4px}
+  .reset-button{padding:5px 7px}
+  .scene-wrap{height:auto;aspect-ratio:10.4 / 15.8;min-height:0}
+  .table-caption{bottom:10px;font-size:8px;white-space:nowrap}
+  .table-corner{display:none}
+  .touch-tools{justify-content:center}
+  .touch-selection{width:100%;text-align:center}
+  .panel-foot{padding:8px 10px;gap:6px;flex-direction:column;align-items:start}
+  .touch-instructions{align-self:center;font-size:10px}
+  .lower-row{flex-direction:column;align-items:stretch;gap:10px;padding:12px 0}
+  .daily-note{justify-content:center}
+  .action-links{flex-direction:row;justify-content:center}
+  .action-links button{font-size:12px}
+  .footer{gap:10px;flex-wrap:wrap;line-height:1.8}
+  .win-card{width:calc(100% - 24px)}
+}

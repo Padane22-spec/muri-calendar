@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import { BOARD, PIECES, canPlace, cellKey, getGoal, transform, type Cell, type Placement } from './puzzle';
 import { woodMaterial } from './wood';
-import { centerFor, type PieceState, type Snapshot } from './session';
+import { centerFor, RACKS, type PieceState, type Snapshot } from './session';
 import { drawPlant, seasonFor, type Season } from './theme';
+import { PieceGesture } from './gesture';
 
 type Callbacks={commit:(pieces:Snapshot)=>void;hover:(id:number|null)=>void;message:(text:string)=>void;sound:(kind:'pick'|'drop')=>void};
 type View={group:THREE.Group;model:THREE.Group;body:THREE.Mesh;mark:THREE.Mesh;target:THREE.Vector3;shapeKey:string;shadow:THREE.Mesh};
@@ -101,7 +102,9 @@ export class PuzzleScene {
   private date:Date;
   private active:number|null=null;
   private dragging=false;
-  private pointerId:number|null=null;
+  private gesture=new PieceGesture();
+  private pointerType='mouse';
+  private compact=false;
   private draft:PieceState|null=null;
   private offset=new THREE.Vector2();
   private lastWheel=0;
@@ -116,7 +119,7 @@ export class PuzzleScene {
     this.renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});this.renderer.setPixelRatio(Math.min(devicePixelRatio,2));
     this.renderer.shadowMap.enabled=true;this.renderer.shadowMap.type=THREE.PCFSoftShadowMap;
     this.renderer.toneMapping=THREE.ACESFilmicToneMapping;this.renderer.toneMappingExposure=1.05;
-    this.canvas=this.renderer.domElement;this.canvas.tabIndex=0;this.canvas.setAttribute('aria-label','木质日历拼图：左键拖动，滚轮旋转，右键翻转');
+    this.canvas=this.renderer.domElement;this.canvas.tabIndex=0;this.canvas.setAttribute('aria-label','木质日历拼图：鼠标拖动或单指拖动，点选后可用下方按钮旋转、翻面');
     this.mount.appendChild(this.canvas);this.camera.position.set(0,-6.2,28);this.camera.lookAt(0,0,0);
     this.scene.add(new THREE.HemisphereLight('#fff5e2','#8f9287',2.4));
     const light=new THREE.DirectionalLight('#fff1d4',2.4);light.position.set(-6,9,17);light.castShadow=true;
@@ -131,6 +134,7 @@ export class PuzzleScene {
     this.canvas.addEventListener('lostpointercapture',this.captureLost);this.canvas.addEventListener('pointerleave',this.pointerLeave);
     this.canvas.addEventListener('wheel',this.wheel,{passive:false});this.canvas.addEventListener('contextmenu',this.contextMenu);
     window.addEventListener('keydown',this.keyDown);
+    window.addEventListener('blur',this.windowBlur);
     this.sync(date,pieces,true);this.render();
   }
   private addBoard(){
@@ -204,14 +208,24 @@ export class PuzzleScene {
       view.mark.position.set(mx-minX-w/2,-(my-minY)+h/2,.286);
       view.mark.rotation.z=-p.rotation*Math.PI/2;view.mark.scale.x=p.flipped?-1:1;
     }
-    view.target.set(p.position[0],p.position[1],p.placement?0:RACK_Z);view.group.rotation.z=p.angle;
+    const inTray=this.compact&&!p.placement&&!(this.dragging&&this.draft?.id===p.id);
+    const position=inTray?this.trayPosition(p.id):p.position;
+    view.target.set(position[0],position[1],p.placement?0:RACK_Z);view.group.rotation.z=p.angle;
+    view.model.scale.setScalar(inTray ? .52 : 1);
     if(immediate)view.group.position.copy(view.target);
-    const [w,h]=dimensions(cells);view.shadow.scale.set(w+1.7,h+1.7,1);
+    const [w,h]=dimensions(cells),scale=inTray ? .52 : 1;view.shadow.scale.set((w+1.7)*scale,(h+1.7)*scale,1);
   }
   private resize(){
+    this.cancelDrag();
     const width=Math.max(this.mount.clientWidth,1),height=Math.max(this.mount.clientHeight,1),aspect=width/height;
-    const worldWidth=Math.max(23.7,10.5*aspect);this.camera.left=-worldWidth/2;this.camera.right=worldWidth/2;this.camera.top=worldWidth/aspect/2;this.camera.bottom=-worldWidth/aspect/2;this.camera.updateProjectionMatrix();this.renderer.setSize(width,height);
+    this.compact=matchMedia('(max-width:720px)').matches;
+    const worldWidth=this.compact?Math.max(10.4,15.8*aspect):Math.max(23.7,10.5*aspect);
+    const centerY=this.compact?-3.1:0;
+    this.camera.position.set(0,centerY-6.2,28);this.camera.lookAt(0,centerY,0);
+    this.camera.left=-worldWidth/2;this.camera.right=worldWidth/2;this.camera.top=worldWidth/aspect/2;this.camera.bottom=-worldWidth/aspect/2;this.camera.updateProjectionMatrix();this.renderer.setSize(width,height);
+    this.pieces.forEach(p=>this.updateView(p,true));
   }
+  private trayPosition(id:number):[number,number]{return [(id%4-1.5)*2.45,-5.7-Math.floor(id/4)*2.7];}
   private render=()=>{
     this.frame=requestAnimationFrame(this.render);const now=performance.now();const dt=Math.min((now-this.previousTime)/1000,.05);this.previousTime=now;
     const ease=this.reduced.matches?1:1-Math.exp(-22*dt);
@@ -244,22 +258,27 @@ export class PuzzleScene {
   private pick(e:{clientX:number;clientY:number}){this.point(e);const hit=this.raycaster.intersectObjects(this.views.map(v=>v.body),false)[0];return hit?hit.object.userData.id as number:null;}
   private select(id:number|null){if(this.active!==id){this.active=id;this.callbacks.hover(id);}this.canvas.style.cursor=id===null?'default':this.dragging?'grabbing':'grab';}
   private pointerDown=(e:PointerEvent)=>{
-    if(e.button!==0)return;const id=this.pick(e);if(id===null)return;
+    if(e.button!==0||this.gesture.pointerId!==null||!e.isPrimary)return;
+    this.pointerType=e.pointerType;const id=this.pick(e);if(id===null){this.select(null);return;}
+    if(!this.gesture.begin(e))return;
     e.preventDefault();this.canvas.focus({preventScroll:true});this.select(id);this.dragging=true;this.draft=clone(this.pieces[id]);this.draft.placement=null;this.draft.angle=0;
+    if(this.compact&&!this.pieces[id].placement)this.draft.position=this.trayPosition(id);
     const point=this.point(e);if(point)this.offset.set(this.draft.position[0]-point.x,this.draft.position[1]-point.y);
-    this.pointerId=e.pointerId;this.canvas.setPointerCapture(e.pointerId);this.callbacks.sound('pick');this.updateView(this.draft);this.updateGhost();
+    this.canvas.setPointerCapture(e.pointerId);this.callbacks.sound('pick');this.updateView(this.draft);this.updateGhost();
   };
   private pointerMove=(e:PointerEvent)=>{
     if(this.dragging&&this.draft){
+      if(!this.gesture.move(e))return;
       const p=this.point(e);if(!p)return;this.draft.position=[p.x+this.offset.x,p.y+this.offset.y];this.updateView(this.draft);this.updateGhost();
-    }else this.select(this.pick(e));
+    }else if(e.pointerType!=='touch'){this.pointerType=e.pointerType;this.select(this.pick(e));}
   };
   private proposal(p:PieceState):Placement{
     const [w,h]=dimensions(transform(PIECES[p.id].cells,p.rotation,p.flipped));
     return {id:p.id,rotation:p.rotation,flipped:p.flipped,x:Math.round(p.position[0]+3-w/2),y:Math.round(3-p.position[1]-h/2)};
   }
   private pointerUp=(e:PointerEvent)=>{
-    if(e.button!==0||!this.dragging||!this.draft)return;
+    if(e.button!==0||!this.gesture.owns(e)||!this.dragging||!this.draft)return;
+    if(this.gesture.isTap){this.cancelDrag();return;}
     const p=clone(this.draft),proposal=this.proposal(p);const nearBoard=Math.abs(p.position[0])<4.25&&Math.abs(p.position[1])<4.25;
     const placements=this.pieces.flatMap(v=>v.placement?[v.placement]:[]);
     let accepted=true;
@@ -269,20 +288,23 @@ export class PuzzleScene {
     }else{
       const [w,h]=dimensions(transform(PIECES[p.id].cells,p.rotation,p.flipped));
       p.position=[THREE.MathUtils.clamp(p.position[0],-11+w/2,11-w/2),THREE.MathUtils.clamp(p.position[1],-4.7+h/2,4.7-h/2)];p.placement=null;
-      this.callbacks.message('暂放桌面，换个角度再想一想。');
+      if(this.compact)p.position=[...(this.pieces[p.id].placement?RACKS[p.id]:this.pieces[p.id].position)];
+      this.callbacks.message(this.compact?'已放回积木托盘，换个角度再试。':'暂放桌面，换个角度再想一想。');
     }
     this.finishDrag();
     if(accepted){const next=clone(this.pieces);next[p.id]=p;this.pieces=next;this.updateView(p);this.callbacks.commit(next);this.callbacks.sound('drop');}
     else this.updateView(this.pieces[p.id]);
   };
   private finishDrag(){
+    const pointerId=this.gesture.clear();
     this.dragging=false;this.draft=null;this.ghost.clear();
-    if(this.pointerId!==null&&this.canvas.hasPointerCapture(this.pointerId))this.canvas.releasePointerCapture(this.pointerId);this.pointerId=null;
+    if(pointerId!==null&&this.canvas.hasPointerCapture(pointerId))this.canvas.releasePointerCapture(pointerId);
   }
   cancelDrag(){if(!this.dragging)return;const id=this.draft!.id;this.finishDrag();this.updateView(this.pieces[id]);}
-  private pointerCancel=()=>this.cancelDrag();
-  private captureLost=()=>this.cancelDrag();
-  private pointerLeave=()=>{if(!this.dragging)this.select(null);};
+  private pointerCancel=(e:PointerEvent)=>{if(this.gesture.owns(e))this.cancelDrag();};
+  private captureLost=(e:PointerEvent)=>{if(this.gesture.owns(e))this.cancelDrag();};
+  private windowBlur=()=>this.cancelDrag();
+  private pointerLeave=()=>{if(!this.dragging&&this.pointerType!=='touch')this.select(null);};
   private ghostGeometry:THREE.ShapeGeometry|null=null;
   private ghostMaterial=new THREE.MeshBasicMaterial({color:'#778c62',transparent:true,opacity:.44,depthWrite:false});
   private updateGhost(){
@@ -303,14 +325,16 @@ export class PuzzleScene {
     }
     p.angle=0;this.updateView(p);const v=this.views[p.id];
     if(!this.reduced.matches){if(kind==='rotate')v.model.rotation.z=direction*Math.PI/2;else v.model.rotation.y=Math.PI;}
-    if(this.dragging){this.draft=p;this.updateGhost();}
+    if(this.dragging){this.gesture.markChanged();this.draft=p;this.updateGhost();}
     else{const next=clone(this.pieces);next[p.id]=p;this.pieces=next;this.callbacks.commit(next);}
   }
+  rotateSelected(direction=1){this.changeShape('rotate',direction);}
+  flipSelected(){this.changeShape('flip');}
   private wheel=(e:WheelEvent)=>{
     const id=this.dragging?this.active:this.pick(e);if(id===null)return;e.preventDefault();
     if(Math.abs(e.deltaY)<2||performance.now()-this.lastWheel<160)return;this.lastWheel=performance.now();this.select(id);this.changeShape('rotate',e.deltaY>0?1:-1);
   };
-  private contextMenu=(e:MouseEvent)=>{e.preventDefault();const id=this.dragging?this.active:this.pick(e);if(id!==null){this.select(id);this.changeShape('flip');}};
+  private contextMenu=(e:MouseEvent)=>{e.preventDefault();if(this.pointerType==='touch')return;const id=this.dragging?this.active:this.pick(e);if(id!==null){this.select(id);this.changeShape('flip');}};
   private keyDown=(e:KeyboardEvent)=>{
     if(e.target instanceof HTMLInputElement||e.target instanceof HTMLTextAreaElement||e.ctrlKey||e.metaKey)return;
     if(e.key==='Escape')this.cancelDrag();
@@ -318,6 +342,7 @@ export class PuzzleScene {
     if(e.key.toLowerCase()==='f'){e.preventDefault();this.changeShape('flip');}
   };
   dispose(){
+    this.cancelDrag();window.removeEventListener('blur',this.windowBlur);
     cancelAnimationFrame(this.frame);this.resizeObserver.disconnect();window.removeEventListener('keydown',this.keyDown);
     this.canvas.removeEventListener('pointerdown',this.pointerDown);this.canvas.removeEventListener('pointermove',this.pointerMove);this.canvas.removeEventListener('pointerup',this.pointerUp);this.canvas.removeEventListener('pointercancel',this.pointerCancel);this.canvas.removeEventListener('lostpointercapture',this.captureLost);this.canvas.removeEventListener('pointerleave',this.pointerLeave);this.canvas.removeEventListener('wheel',this.wheel);this.canvas.removeEventListener('contextmenu',this.contextMenu);
     this.ghostGeometry?.dispose();this.ghostMaterial.dispose();this.geometries.forEach(g=>g.dispose());disposeTree(this.scene);this.renderer.dispose();this.canvas.remove();
