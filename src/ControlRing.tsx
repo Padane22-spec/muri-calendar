@@ -22,9 +22,14 @@ export const ControlRing=forwardRef<ControlRingHandle,Props>(function ControlRin
     if(owner.current&&!anchor.rotating)release();
     root.current.hidden=false;
     const rect=root.current.getBoundingClientRect();
-    const visible={left:Math.max(0,-rect.left),top:Math.max(0,-rect.top),right:Math.min(width,window.innerWidth-rect.left),bottom:Math.min(height,window.innerHeight-rect.top)};
+    const viewport=window.visualViewport;
+    const viewportLeft=viewport?.offsetLeft??0,viewportTop=viewport?.offsetTop??0;
+    const visible={left:Math.max(0,viewportLeft-rect.left),top:Math.max(0,viewportTop-rect.top),right:Math.min(width,viewportLeft+(viewport?.width??window.innerWidth)-rect.left),bottom:Math.min(height,viewportTop+(viewport?.height??window.innerHeight)-rect.top)};
     if(visible.right-visible.left<112||visible.bottom-visible.top<112){release();root.current.hidden=true;return;}
-    if(!layout.current||selectedId.current!==anchor.id||(!owner.current&&!anchor.animating))layout.current=ringLayout(anchor,width,height,visible);
+    const current=layout.current;
+    const fits=current&&current.x-current.radius-22>=visible.left&&current.x+current.radius+22<=visible.right&&current.y-current.radius-22>=visible.top&&current.y+current.radius+22<=visible.bottom;
+    if(owner.current&&!fits)release();
+    if(!current||!fits||selectedId.current!==anchor.id||(!owner.current&&!anchor.animating))layout.current=ringLayout(anchor,width,height,visible);
     selectedId.current=anchor.id;
     const {x,y,radius:r}=layout.current!;
     group.current?.setAttribute('transform','translate('+x+' '+y+')');

@@ -27,12 +27,13 @@ test('cancel or release clears ownership and the next touch starts as a new tap'
   assert.equal(gesture.isTap,false);
   assert.ok(gesture.begin({...touch,pointerId:3}));assert.ok(gesture.isTap);
 });
-test('mouse drags start immediately while non-primary buttons are ignored',()=>{
+test('mouse clicks stay taps until movement exceeds slop and non-primary buttons are ignored',()=>{
   for(const pointerType of ['mouse']){
     const gesture=new PieceGesture();
     assert.equal(gesture.begin({...touch,pointerType,button:2}),false);
-    assert.ok(gesture.begin({...touch,pointerType}));assert.equal(gesture.isTap,false);
-    assert.ok(gesture.move(touch));
+    assert.ok(gesture.begin({...touch,pointerType}));assert.ok(gesture.isTap);
+    assert.equal(gesture.move(touch),false);
+    assert.ok(gesture.move({...touch,clientX:110}));assert.equal(gesture.isTap,false);
   }
 });
 test('pen taps have the same jitter tolerance as a finger',()=>{

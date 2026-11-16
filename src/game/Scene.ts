@@ -103,6 +103,7 @@ export class PuzzleScene {
   private theme:Season;
   private date:Date;
   private active:number|null=null;
+  private controlsVisible=false;
   private dragging=false;
   private mode:InteractionMode='idle';
   private candidate:Placement|null=null;
@@ -140,6 +141,7 @@ export class PuzzleScene {
     const table=new THREE.Mesh(new THREE.PlaneGeometry(100,100),new THREE.ShadowMaterial({color:'#5c4930',opacity:.2}));table.position.z=-.515;table.receiveShadow=true;this.scene.add(table);
     this.addBoard();this.addPieces();this.scene.add(this.labels,this.ghost);this.updateLabels();
     this.resizeObserver=new ResizeObserver(()=>this.resize());this.resizeObserver.observe(mount);this.resize();
+    this.pointerDown=this.pointerDown.bind(this);this.pointerMove=this.pointerMove.bind(this);
     this.pointerUp=this.pointerUp.bind(this);this.pointerCancel=this.pointerCancel.bind(this);
     this.canvas.addEventListener('pointerdown',this.pointerDown);this.canvas.addEventListener('pointermove',this.pointerMove);
     this.canvas.addEventListener('pointerup',this.pointerUp);this.canvas.addEventListener('pointercancel',this.pointerCancel);
@@ -147,6 +149,7 @@ export class PuzzleScene {
     this.canvas.addEventListener('wheel',this.wheel,{passive:false});this.canvas.addEventListener('contextmenu',this.contextMenu);
     window.addEventListener('keydown',this.keyDown);
     window.addEventListener('blur',this.windowBlur);
+    document.addEventListener('pointerdown',this.outsideDown,true);
     this.sync(date,pieces,true);this.render();
   }
   private addBoard(){
@@ -203,9 +206,11 @@ export class PuzzleScene {
     });
   }
   sync(date:Date,pieces:Snapshot,immediate=false){
-    this.cancelDrag();this.contacts.cancel();
-    const changed=date.getTime()!==this.date.getTime();this.date=date;this.pieces=clone(pieces);
-    if(changed){this.select(null);this.theme=seasonFor(date);this.updateLabels();this.views.forEach((_,id)=>this.updateMark(id));}
+    const changed=date.getTime()!==this.date.getTime();
+    const replaced=changed||this.ring!==null||this.gesture.pointerId!==null||JSON.stringify(pieces)!==JSON.stringify(this.pieces);
+    this.cancelDrag(replaced);this.contacts.cancel();
+    this.date=date;this.pieces=clone(pieces);
+    if(changed){this.theme=seasonFor(date);this.updateLabels();this.views.forEach((_,id)=>this.updateMark(id));}
     pieces.forEach(p=>this.updateView(p,immediate));
   }
   private updateView(p:PieceState,immediate=false){
@@ -245,7 +250,8 @@ export class PuzzleScene {
       const moving=this.mode==='moving'&&this.draft?.id===id;
       const manipulating=this.draft?.id===id&&(moving||this.mode==='rotating');
       const p=manipulating?this.draft!:this.pieces[id];
-      const lift=manipulating ? .83 : this.active===id ? .11 : 0;
+      const selected=!p.placement&&this.active===id&&(this.controlsVisible||this.pointerType==='mouse');
+      const lift=manipulating ? .83 : selected ? .11 : 0;
       if(moving&&this.pointerType==='touch')this.fingerLift=this.reduced.matches?40:Math.min(40,this.fingerLift+dt*400);
       if(moving&&this.draft)this.positionDraft(this.lastPoint);
       const targets={x:v.target.x,y:v.target.y,z:(p.placement?0:RACK_Z)+lift,scale:v.scale,turn:v.turn,flip:v.flip,angle:v.angle,tiltX:moving&&!this.reduced.matches?this.tilt.x:0,tiltY:moving&&!this.reduced.matches?this.tilt.y:0};
@@ -288,13 +294,13 @@ export class PuzzleScene {
   }
   private pick(e:{clientX:number;clientY:number}){this.point(e);const hit=this.raycaster.intersectObjects(this.views.map(v=>v.body),false)[0];return hit?hit.object.userData.id as number:null;}
   private select(id:number|null){
+    if(this.active!==id||id===null){this.controlsVisible=false;this.callbacks.controls?.(null);}
     if(this.active!==id){this.active=id;this.callbacks.hover(id);}
     if(this.mode==='idle'||this.mode==='selected')this.mode=id===null?'idle':'selected';
     this.canvas.style.cursor=id===null?'default':this.dragging?'grabbing':'grab';
-    if(id!==null&&this.pointerType!=='mouse'&&!this.taughtControls){this.taughtControls=true;this.callbacks.message('拖弧线转向，点「翻面」换一面；拖积木本体移动。');}
   }
   private updateControls(){
-    if(this.active===null||this.pointerType==='mouse'||this.mode==='moving'||this.mode==='pressed'){this.callbacks.controls?.(null);return;}
+    if(!this.controlsVisible||this.active===null||this.mode==='moving'||this.mode==='pressed'){this.callbacks.controls?.(null);return;}
     const v=this.views[this.active],bounds=new THREE.Box3().setFromObject(v.model),size={width:this.mount.clientWidth,height:this.mount.clientHeight};
     const points:THREE.Vector3[]=[];
     for(const x of [bounds.min.x,bounds.max.x])for(const y of [bounds.min.y,bounds.max.y])for(const z of [bounds.min.z,bounds.max.z])points.push(new THREE.Vector3(x,y,z).project(this.camera));
@@ -303,18 +309,20 @@ export class PuzzleScene {
     const animating=Math.abs(v.motion.turn.value-v.turn)>.01||Math.abs(v.motion.flip.value-v.flip)>.01;
     this.callbacks.controls?.({id:this.active,x:(left+right)/2,y:(top+bottom)/2,width:right-left,height:bottom-top,angle:this.ring?.rotation.angle??0,rotating:this.ring!==null,animating});
   }
-  private pointerDown=(e:PointerEvent)=>{
+  private pointerDown(e:PointerEvent){
+    if(this.gesture.pointerId===null&&!this.ring&&e.isPrimary)this.pointerType=e.pointerType;
     if(e.button!==0||this.gesture.pointerId!==null||this.ring||!e.isPrimary)return;
     this.pointerType=e.pointerType;const id=this.pick(e);if(id===null){this.select(null);return;}
     if(!this.gesture.begin(e))return;
     e.preventDefault();this.canvas.focus({preventScroll:true});this.select(id);this.mode='pressed';this.contacts.cancel(id);
+    this.controlsVisible=false;this.callbacks.controls?.(null);
     this.downPoint={clientX:e.clientX,clientY:e.clientY};this.lastPoint=this.downPoint;
     this.canvas.setPointerCapture(e.pointerId);
-    if(e.pointerType==='mouse')this.startMove();
   };
   private startMove(){
     if(this.active===null)return;
     const id=this.active,v=this.views[id];
+    this.controlsVisible=false;this.callbacks.controls?.(null);
     this.mode='moving';this.dragging=true;this.fingerLift=0;this.candidate=null;
     this.draft=clone(this.pieces[id]);this.draft.placement=null;this.draft.angle=0;
     this.draft.position=[v.group.position.x,v.group.position.y];
@@ -326,7 +334,7 @@ export class PuzzleScene {
     const point=this.point({clientX:e.clientX,clientY:e.clientY-this.fingerLift});if(!point)return;
     this.draft.position=[point.x+this.offset.x,point.y+this.offset.y];this.updateView(this.draft);this.updateGhost();
   }
-  private pointerMove=(e:PointerEvent)=>{
+  private pointerMove(e:PointerEvent){
     if(this.ring)return;
     if(this.gesture.pointerId!==null){
       if(!this.gesture.move(e))return;
@@ -334,12 +342,19 @@ export class PuzzleScene {
       if(this.mode!=='moving')return;
       this.tilt.set(clamp((e.clientY-this.lastPoint.clientY)*.0015,-.052,.052),clamp((e.clientX-this.lastPoint.clientX)*.0015,-.052,.052));
       this.lastPoint={clientX:e.clientX,clientY:e.clientY};this.positionDraft(e);
-    }else if(e.pointerType==='mouse'){this.pointerType=e.pointerType;this.select(this.pick(e));}
+    }else if(e.pointerType==='mouse'&&!this.controlsVisible){this.pointerType=e.pointerType;this.select(this.pick(e));}
   };
   private proposal(p:PieceState):Placement{return proposalFor(p,this.candidate);}
   private pointerUp(e:PointerEvent){
     if(e.button!==0||!this.gesture.owns(e))return;
-    if(this.mode==='pressed'){this.finishDrag();return;}
+    if(this.mode==='pressed'){
+      if(this.gesture.move(e))this.startMove();
+      else{
+        this.finishDrag();this.controlsVisible=true;
+        if(!this.taughtControls){this.taughtControls=true;this.callbacks.message('拖弧线转向，点「翻面」换一面；拖积木本体移动。');}
+        return;
+      }
+    }
     if(!this.draft||this.mode!=='moving')return;
     this.lastPoint={clientX:e.clientX,clientY:e.clientY};this.positionDraft(e);
     const p=clone(this.draft),proposal=this.proposal(p);const nearBoard=Math.abs(p.position[0])<4.25&&Math.abs(p.position[1])<4.25;
@@ -367,15 +382,19 @@ export class PuzzleScene {
     this.dragging=false;this.draft=null;this.candidate=null;this.mode=this.active===null?'idle':'selected';this.clearGhost();
     if(pointerId!==null&&this.canvas.hasPointerCapture(pointerId))this.canvas.releasePointerCapture(pointerId);
   }
-  cancelDrag(){
+  cancelDrag(dismissControls=true){
     this.contacts.cancel();
     const id=this.draft?.id;this.ring=null;this.finishDrag();
     if(id!==undefined)this.updateView(this.pieces[id]);
+    if(dismissControls)this.select(null);
   }
   private pointerCancel(e:PointerEvent){if(this.gesture.owns(e))this.cancelDrag();}
   private captureLost=(e:PointerEvent)=>{if(this.gesture.owns(e))this.cancelDrag();};
   private windowBlur=()=>this.cancelDrag();
-  private pointerLeave=()=>{if(this.gesture.pointerId===null&&!this.ring&&this.pointerType==='mouse')this.select(null);};
+  private outsideDown=(e:PointerEvent)=>{
+    if(e.isPrimary&&e.target instanceof Node&&!this.mount.parentElement?.contains(e.target))this.cancelDrag();
+  };
+  private pointerLeave=()=>{if(!this.controlsVisible&&this.gesture.pointerId===null&&!this.ring&&this.pointerType==='mouse')this.select(null);};
   private ghostGeometry:THREE.ShapeGeometry|null=null;
   private ghostMaterial=new THREE.MeshBasicMaterial({color:'#778c62',transparent:true,opacity:.44,depthWrite:false});
   private clearGhost(){this.ghost.clear();this.ghostGeometry?.dispose();this.ghostGeometry=null;this.ghostKey='';}
@@ -442,7 +461,7 @@ export class PuzzleScene {
     if(e.key.toLowerCase()==='f'){e.preventDefault();this.changeShape('flip');}
   };
   dispose(){
-    this.cancelDrag();this.callbacks.controls?.(null);window.removeEventListener('blur',this.windowBlur);
+    this.cancelDrag();this.callbacks.controls?.(null);window.removeEventListener('blur',this.windowBlur);document.removeEventListener('pointerdown',this.outsideDown,true);
     cancelAnimationFrame(this.frame);this.resizeObserver.disconnect();window.removeEventListener('keydown',this.keyDown);
     this.canvas.removeEventListener('pointerdown',this.pointerDown);this.canvas.removeEventListener('pointermove',this.pointerMove);this.canvas.removeEventListener('pointerup',this.pointerUp);this.canvas.removeEventListener('pointercancel',this.pointerCancel);this.canvas.removeEventListener('lostpointercapture',this.captureLost);this.canvas.removeEventListener('pointerleave',this.pointerLeave);this.canvas.removeEventListener('wheel',this.wheel);this.canvas.removeEventListener('contextmenu',this.contextMenu);
     this.ghostGeometry?.dispose();this.ghostMaterial.dispose();disposeTree(this.scene);this.renderer.dispose();this.canvas.remove();
