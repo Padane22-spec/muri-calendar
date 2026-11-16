@@ -8,7 +8,7 @@ export class PieceGesture {
   private moved=false;
   begin(event:PointerSample){
     if(this.pointerId!==null||event.button!==0||!event.isPrimary)return false;
-    this.pointerId=event.pointerId;this.touch=event.pointerType==='touch';
+    this.pointerId=event.pointerId;this.touch=event.pointerType!=='mouse';
     this.start={x:event.clientX,y:event.clientY};this.moved=!this.touch;return true;
   }
   owns(event:{pointerId:number}){return this.pointerId!==null&&this.pointerId===event.pointerId;}
@@ -21,3 +21,5 @@ export class PieceGesture {
   markChanged(){if(this.pointerId!==null)this.moved=true;}
   clear(){const id=this.pointerId;this.pointerId=null;this.moved=false;return id;}
 }
+
+export type InteractionMode='idle'|'selected'|'pressed'|'moving'|'rotating';

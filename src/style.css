@@ -19,15 +19,10 @@
 @media(max-width:900px){.header-tagline{display:none}}
 @media(max-width:600px){.github-link{padding:5px 7px;margin-left:2px;font-size:10px}.intro-copy .eyebrow{display:none}.intro-copy p{font-size:11px}}
 
-/* Touch controls stay outside the canvas so a second finger can turn a held piece. */
-.touch-tools,.touch-instructions{display:none}
+/* Touch targets and single-pointer canvas gestures. */
+.touch-instructions{display:none}
 .scene-wrap canvas{touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
 @media(max-width:720px),(any-pointer:coarse){
-  .touch-tools{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;border-top:1px solid var(--line);background:#fbfaf6}
-  .touch-selection{font-size:12px;color:var(--season)}
-  .touch-tools>div{display:flex;gap:8px}
-  .touch-tools button{min-width:64px;min-height:44px;padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:var(--season-pale);color:var(--season);font-size:13px;touch-action:manipulation;cursor:pointer}
-  .touch-tools button:disabled{opacity:.4;cursor:default}
   .desktop-controls{display:none}
   .touch-instructions{display:flex}
   .help-button{width:36px;height:36px;font-size:14px}
@@ -63,8 +58,6 @@
   .scene-wrap{height:auto;aspect-ratio:10.4 / 15.8;min-height:0}
   .table-caption{bottom:10px;font-size:8px;white-space:nowrap}
   .table-corner{display:none}
-  .touch-tools{justify-content:center}
-  .touch-selection{width:100%;text-align:center}
   .panel-foot{padding:8px 10px;gap:6px;flex-direction:column;align-items:start}
   .touch-instructions{align-self:center;font-size:10px}
   .lower-row{flex-direction:column;align-items:stretch;gap:10px;padding:12px 0}
@@ -74,3 +67,21 @@
   .footer{gap:10px;flex-wrap:wrap;line-height:1.8}
   .win-card{width:calc(100% - 24px)}
 }
+
+/* Nearby controls share the scene's coordinates; the empty overlay passes through input. */
+.control-ring{position:absolute;inset:0;z-index:1;pointer-events:none;user-select:none;-webkit-user-select:none}
+.control-ring[hidden]{display:none}
+.ring-svg{position:absolute;inset:0;width:100%;height:100%;overflow:hidden;pointer-events:none}
+.ring-arc{fill:none;stroke:var(--season);stroke-width:1.5;stroke-dasharray:3 3;opacity:.75}
+.ring-connector{fill:none;stroke:var(--season);stroke-width:1;stroke-dasharray:3 4;opacity:.5}
+.ring-indicator{fill:var(--season);stroke:#fcfaf2;stroke-width:2}
+.ring-label{fill:var(--season);font-size:10px;paint-order:stroke;stroke:#fcfaf2;stroke-width:4px;stroke-linejoin:round}
+.ring-hit{fill:none;stroke:transparent;stroke-width:44;pointer-events:stroke;touch-action:none;cursor:grab}
+.ring-hit:active{cursor:grabbing}
+.ring-button{position:absolute;transform:translate(-50%,-50%);display:flex;align-items:center;justify-content:center;gap:3px;width:44px;height:44px;border:1px solid color-mix(in srgb,var(--season) 40%,#e3d9c6);border-radius:50%;background:#fcfaf2f5;color:var(--season);box-shadow:0 3px 12px #42301a18;pointer-events:auto;touch-action:manipulation;font-size:24px;cursor:pointer}
+.ring-button:hover,.ring-button:active{background:var(--season-pale);border-color:var(--season)}
+.ring-flip{width:64px;border-radius:22px;font-size:22px}
+.ring-flip span{font-size:11px}
+.ring-ticks{fill:var(--season);stroke:#fcfaf2;stroke-width:1.5}
+
+@media(prefers-reduced-motion:reduce){.win-card,.win-card>.stamp{animation:none}}
